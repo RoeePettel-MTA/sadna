@@ -1,16 +1,32 @@
 import { Ionicons } from '@expo/vector-icons';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
+import { router } from 'expo-router';
 import AnomalyDetectionScreen from '../screens/AnomalyDetectionScreen';
 import CowDetailScreen from '../screens/CowDetailScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import FarmManagementScreen from '../screens/FarmManagementScreen';
+import { logout } from '../services/AuthService';
 
 const Drawer = createDrawerNavigator();
 
 // Custom sidebar content component
 const SidebarContent = props => {
+  const handleLogout = async () => {
+    try {
+      const result = await logout();
+      if (result.success) {
+        router.replace('/');
+      } else {
+        Alert.alert('שגיאה', 'אירעה שגיאה בהתנתקות');
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+      Alert.alert('שגיאה', 'אירעה שגיאה בהתנתקות');
+    }
+  };
+
   return (
     <View style={styles.sidebarContainer}>
       <View style={styles.sidebarHeader}>
@@ -69,6 +85,11 @@ const SidebarContent = props => {
           );
         })}
       </View>
+      
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <Ionicons name="log-out" size={24} color="#ff6b6b" style={styles.sidebarIcon} />
+        <Text style={styles.logoutText}>התנתק</Text>
+      </TouchableOpacity>
       
       <View style={styles.sidebarFooter}>
         <Text style={styles.sidebarFooterText}>v1.0.0</Text>
@@ -166,10 +187,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#4dabf7',
   },
-  sidebarFooter: {
-    paddingVertical: 16,
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 16,
     borderTopWidth: 1,
     borderTopColor: '#dee2e6',
+    paddingTop: 16,
+  },
+  logoutText: {
+    fontSize: 16,
+    color: '#ff6b6b',
+    fontWeight: 'bold',
+  },
+  sidebarFooter: {
+    paddingVertical: 16,
   },
   sidebarFooterText: {
     fontSize: 12,
