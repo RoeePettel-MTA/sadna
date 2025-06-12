@@ -1,336 +1,229 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { detectEarthquakePrecursor } from '../services/AnomalyDetectionService';
 
-// Mock data for anomaly detection
-const mockAnomalies = [
+// Mock data - in a real app, this would be imported from a data service
+const mockCowData = [
   {
-    id: 'anomaly1',
-    timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-    type: 'earthquake',
-    confidence: 0.91,
-    severity: 'Critical',
-    affectedCows: ['cow3', 'cow4'],
-    cowNames: ['Buttercup', 'Clover'],
-    description: 'Multiple cows showing coordinated stress patterns consistent with pre-seismic activity',
-    mlModel: 'Random Forest',
-    features: ['activity_variance', 'stress_level', 'movement_pattern', 'heart_rate'],
-    status: 'active'
+    id: 'cow1',
+    name: 'Bessie',
+    activityLevel: 7.2,
+    stressLevel: 3.5,
+    heartRate: 65,
+    anomalyScore: 0.2,
+    location: { x: 45, y: 32 },
+    lastUpdated: new Date().toISOString(),
   },
   {
-    id: 'anomaly2',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
-    type: 'behavior',
-    confidence: 0.78,
-    severity: 'Warning',
-    affectedCows: ['cow3'],
-    cowNames: ['Buttercup'],
-    description: 'Unusual pacing and elevated stress levels',
-    mlModel: 'LSTM',
-    features: ['activity_level', 'stress_level', 'movement_pattern'],
-    status: 'active'
+    id: 'cow3',
+    name: 'Buttercup',
+    activityLevel: 8.9,
+    stressLevel: 8.7,
+    heartRate: 95,
+    anomalyScore: 0.85,
+    location: { x: 12, y: 78 },
+    lastUpdated: new Date().toISOString(),
   },
   {
-    id: 'anomaly3',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    type: 'earthquake',
-    confidence: 0.85,
-    severity: 'Warning',
-    affectedCows: ['cow1', 'cow3', 'cow5'],
-    cowNames: ['Bessie', 'Buttercup', 'Milky'],
-    description: 'Coordinated stress response in multiple cows',
-    mlModel: 'CNN',
-    features: ['activity_variance', 'stress_level', 'heart_rate'],
-    status: 'resolved'
+    id: 'cow4',
+    name: 'Clover',
+    activityLevel: 9.1,
+    stressLevel: 7.9,
+    heartRate: 88,
+    anomalyScore: 0.72,
+    location: { x: 67, y: 22 },
+    lastUpdated: new Date().toISOString(),
+  },
+  {
+    id: 'cow5',
+    name: 'Daisy',
+    activityLevel: 8.5,
+    stressLevel: 8.2,
+    heartRate: 92,
+    anomalyScore: 0.78,
+    location: { x: 34, y: 45 },
+    lastUpdated: new Date().toISOString(),
   }
 ];
 
-// Feature importance visualization component
-const FeatureImportance = ({ features }) => {
-  // In a real app, these would be actual importance values from the ML model
-  const importanceValues = {
-    'activity_variance': 0.35,
-    'stress_level': 0.28,
-    'movement_pattern': 0.22,
-    'heart_rate': 0.15
-  };
-  
-  return (
-    <View style={styles.featureContainer}>
-      {features.map(feature => (
-        <View key={feature} style={styles.featureItem}>
-          <Text style={styles.featureLabel}>{feature.replace('_', ' ')}</Text>
-          <View style={styles.featureBarContainer}>
-            <View 
-              style={[
-                styles.featureBar, 
-                { width: `${importanceValues[feature] * 100}%` }
-              ]} 
-            />
-          </View>
-          <Text style={styles.featureValue}>
-            {(importanceValues[feature] * 100).toFixed(0)}%
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-};
-
-// Anomaly card component
-const AnomalyCard = ({ anomaly, onPress }) => (
-  <TouchableOpacity style={styles.anomalyCard} onPress={onPress}>
-    <View style={styles.anomalyHeader}>
-      <View style={styles.anomalyTypeContainer}>
-        <View style={[
-          styles.anomalyTypeDot,
-          { backgroundColor: anomaly.type === 'earthquake' ? '#ff6b6b' : '#ffa94d' }
-        ]} />
-        <Text style={styles.anomalyType}>{anomaly.type.toUpperCase()}</Text>
-      </View>
-      <Text style={styles.anomalyTime}>
-        {new Date(anomaly.timestamp).toLocaleTimeString()}
-      </Text>
-    </View>
-    
-    <Text style={styles.anomalyDescription}>{anomaly.description}</Text>
-    
-    <View style={styles.anomalyStats}>
-      <View style={styles.anomalyStat}>
-        <Text style={styles.anomalyStatLabel}>Confidence</Text>
-        <Text style={[
-          styles.anomalyStatValue,
-          { color: anomaly.confidence > 0.8 ? '#ff6b6b' : '#ffa94d' }
-        ]}>
-          {(anomaly.confidence * 100).toFixed(0)}%
-        </Text>
-      </View>
-      <View style={styles.anomalyStat}>
-        <Text style={styles.anomalyStatLabel}>Severity</Text>
-        <Text style={[
-          styles.anomalyStatValue,
-          { color: anomaly.severity === 'Critical' ? '#ff6b6b' : '#ffa94d' }
-        ]}>
-          {anomaly.severity}
-        </Text>
-      </View>
-      <View style={styles.anomalyStat}>
-        <Text style={styles.anomalyStatLabel}>Cows</Text>
-        <Text style={styles.anomalyStatValue}>{anomaly.affectedCows.length}</Text>
-      </View>
-    </View>
-    
-    <View style={styles.anomalyFooter}>
-      <Text style={styles.anomalyModel}>Model: {anomaly.mlModel}</Text>
-      <View style={[
-        styles.anomalyStatus,
-        { backgroundColor: anomaly.status === 'active' ? '#ff6b6b' : '#51cf66' }
-      ]}>
-        <Text style={styles.anomalyStatusText}>{anomaly.status}</Text>
-      </View>
-    </View>
-  </TouchableOpacity>
-);
-
-// Anomaly detail component
-const AnomalyDetail = ({ anomaly, onClose }) => (
-  <View style={styles.detailContainer}>
-    <View style={styles.detailHeader}>
-      <Text style={styles.detailTitle}>
-        {anomaly.type.toUpperCase()} ANOMALY
-      </Text>
-      <TouchableOpacity onPress={onClose}>
-        <Text style={styles.closeButton}>×</Text>
-      </TouchableOpacity>
-    </View>
-    
-    <Text style={styles.detailDescription}>{anomaly.description}</Text>
-    
-    <View style={styles.detailSection}>
-      <Text style={styles.detailSectionTitle}>Affected Cows</Text>
-      <View style={styles.cowList}>
-        {anomaly.cowNames.map((name, index) => (
-          <View key={index} style={styles.cowItem}>
-            <Text style={styles.cowName}>{name}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-    
-    <View style={styles.detailSection}>
-      <Text style={styles.detailSectionTitle}>Detection Details</Text>
-      <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>Detected at:</Text>
-        <Text style={styles.detailValue}>
-          {new Date(anomaly.timestamp).toLocaleString()}
-        </Text>
-      </View>
-      <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>Confidence:</Text>
-        <Text style={[
-          styles.detailValue,
-          { color: anomaly.confidence > 0.8 ? '#ff6b6b' : '#ffa94d' }
-        ]}>
-          {(anomaly.confidence * 100).toFixed(0)}%
-        </Text>
-      </View>
-      <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>Severity:</Text>
-        <Text style={[
-          styles.detailValue,
-          { color: anomaly.severity === 'Critical' ? '#ff6b6b' : '#ffa94d' }
-        ]}>
-          {anomaly.severity}
-        </Text>
-      </View>
-      <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>ML Model:</Text>
-        <Text style={styles.detailValue}>{anomaly.mlModel}</Text>
-      </View>
-    </View>
-    
-    <View style={styles.detailSection}>
-      <Text style={styles.detailSectionTitle}>Feature Importance</Text>
-      <FeatureImportance features={anomaly.features} />
-    </View>
-    
-    <View style={styles.actionButtons}>
-      <TouchableOpacity 
-        style={[styles.actionButton, styles.acknowledgeButton]}
-        onPress={() => {/* Handle acknowledge */}}
-      >
-        <Text style={styles.actionButtonText}>Acknowledge</Text>
-      </TouchableOpacity>
-      <TouchableOpacity 
-        style={[styles.actionButton, styles.investigateButton]}
-        onPress={() => {/* Handle investigate */}}
-      >
-        <Text style={styles.actionButtonText}>Investigate</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-);
-
 const AnomalyDetectionScreen = () => {
-  const [anomalies, setAnomalies] = useState(mockAnomalies);
-  const [loading, setLoading] = useState(false);
-  const [selectedAnomaly, setSelectedAnomaly] = useState(null);
-  const [showResolved, setShowResolved] = useState(false);
-  const [filterType, setFilterType] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [earthquakeRisk, setEarthquakeRisk] = useState(null);
+  const [anomalyCows, setAnomalyCows] = useState([]);
 
   useEffect(() => {
-    // In a real app, fetch anomalies from API
-    const fetchAnomalies = async () => {
+    const analyzeData = async () => {
       setLoading(true);
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        // In production, replace with actual API calls
-        // const response = await fetch('your-api-endpoint/anomalies');
-        // const data = await response.json();
-        // setAnomalies(data);
+        // בדיקת חשש לרעידת אדמה
+        const risk = await detectEarthquakePrecursor(mockCowData);
+        setEarthquakeRisk(risk);
+        
+        // מיון הפרות לפי רמת האנומליה
+        const sortedCows = [...mockCowData].sort((a, b) => b.anomalyScore - a.anomalyScore);
+        setAnomalyCows(sortedCows);
       } catch (error) {
-        console.error('Error fetching anomalies:', error);
+        console.error('Error analyzing data:', error);
       } finally {
         setLoading(false);
       }
     };
-
-    fetchAnomalies();
     
-    // Set up real-time updates
-    const intervalId = setInterval(fetchAnomalies, 60000); // Update every minute
-    
-    return () => clearInterval(intervalId);
+    analyzeData();
   }, []);
 
-  // Filter anomalies based on user preferences
-  const filteredAnomalies = anomalies.filter(anomaly => {
-    if (!showResolved && anomaly.status === 'resolved') return false;
-    if (filterType !== 'all' && anomaly.type !== filterType) return false;
-    return true;
-  });
+  const getRiskLevel = (confidence) => {
+    if (confidence > 0.9) return 'קריטי';
+    if (confidence > 0.8) return 'גבוה מאוד';
+    if (confidence > 0.7) return 'גבוה';
+    if (confidence > 0.5) return 'בינוני';
+    return 'נמוך';
+  };
+
+  const getRiskColor = (confidence) => {
+    if (confidence > 0.9) return '#ff6b6b';
+    if (confidence > 0.8) return '#ffa94d';
+    if (confidence > 0.7) return '#ffd43b';
+    if (confidence > 0.5) return '#74c0fc';
+    return '#51cf66';
+  };
+
+  const getAnomalyStatus = (cow) => {
+    if (cow.anomalyScore > 0.8) return { text: 'חריגה קריטית', color: '#ff6b6b' };
+    if (cow.anomalyScore > 0.7) return { text: 'חריגה גבוהה', color: '#ffa94d' };
+    if (cow.anomalyScore > 0.5) return { text: 'חריגה בינונית', color: '#ffd43b' };
+    return { text: 'תקין', color: '#51cf66' };
+  };
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Earthquake Anomaly Detection</Text>
+      <Text style={styles.title}>זיהוי אנומליות ורעידות אדמה</Text>
       
       {loading ? (
         <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />
-      ) : selectedAnomaly ? (
-        <AnomalyDetail 
-          anomaly={selectedAnomaly} 
-          onClose={() => setSelectedAnomaly(null)} 
-        />
       ) : (
         <>
-          <View style={styles.filterContainer}>
-            <View style={styles.filterRow}>
-              <Text style={styles.filterLabel}>Show Resolved:</Text>
-              <Switch
-                value={showResolved}
-                onValueChange={setShowResolved}
-                trackColor={{ false: '#767577', true: '#4dabf7' }}
-                thumbColor="#f4f3f4"
-              />
-            </View>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>סיכום סיכונים</Text>
             
-            <View style={styles.typeFilterContainer}>
-              <TouchableOpacity 
-                style={[
-                  styles.typeFilter, 
-                  filterType === 'all' && styles.activeTypeFilter
-                ]}
-                onPress={() => setFilterType('all')}
-              >
-                <Text style={[
-                  styles.typeFilterText,
-                  filterType === 'all' && styles.activeTypeFilterText
-                ]}>All</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[
-                  styles.typeFilter, 
-                  filterType === 'earthquake' && styles.activeTypeFilter
-                ]}
-                onPress={() => setFilterType('earthquake')}
-              >
-                <Text style={[
-                  styles.typeFilterText,
-                  filterType === 'earthquake' && styles.activeTypeFilterText
-                ]}>Earthquake</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[
-                  styles.typeFilter, 
-                  filterType === 'behavior' && styles.activeTypeFilter
-                ]}
-                onPress={() => setFilterType('behavior')}
-              >
-                <Text style={[
-                  styles.typeFilterText,
-                  filterType === 'behavior' && styles.activeTypeFilterText
-                ]}>Behavior</Text>
-              </TouchableOpacity>
+            <View style={[
+              styles.riskCard,
+              { backgroundColor: earthquakeRisk?.detected ? '#fff5f5' : '#f1f3f5' }
+            ]}>
+              <View style={styles.riskHeader}>
+                <Text style={styles.riskTitle}>סיכון לרעידת אדמה</Text>
+                {earthquakeRisk?.detected && (
+                  <View style={[
+                    styles.riskBadge,
+                    { backgroundColor: getRiskColor(earthquakeRisk.confidence) }
+                  ]}>
+                    <Text style={styles.riskBadgeText}>
+                      {getRiskLevel(earthquakeRisk.confidence)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              
+              <Text style={styles.riskDescription}>
+                {earthquakeRisk?.detected 
+                  ? `זוהה חשש לרעידת אדמה ברמת ביטחון של ${Math.round(earthquakeRisk.confidence * 100)}%. ${earthquakeRisk.details}`
+                  : 'לא זוהה סיכון לרעידת אדמה בנתונים הנוכחיים.'}
+              </Text>
+              
+              {earthquakeRisk?.detected && (
+                <View style={styles.confidenceBar}>
+                  <View 
+                    style={[
+                      styles.confidenceFill,
+                      { 
+                        width: `${earthquakeRisk.confidence * 100}%`,
+                        backgroundColor: getRiskColor(earthquakeRisk.confidence)
+                      }
+                    ]} 
+                  />
+                </View>
+              )}
             </View>
           </View>
           
-          <Text style={styles.sectionTitle}>
-            {filteredAnomalies.length} Anomalies Detected
-          </Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>פרות עם התנהגות חריגה</Text>
+            
+            {anomalyCows.map(cow => {
+              const status = getAnomalyStatus(cow);
+              return (
+                <View key={cow.id} style={styles.cowCard}>
+                  <View style={styles.cowHeader}>
+                    <Text style={styles.cowName}>{cow.name}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: status.color }]}>
+                      <Text style={styles.statusText}>{status.text}</Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.cowStats}>
+                    <View style={styles.statItem}>
+                      <Text style={styles.statLabel}>פעילות</Text>
+                      <Text style={[
+                        styles.statValue,
+                        { color: cow.activityLevel > 8 ? '#ff6b6b' : 'black' }
+                      ]}>
+                        {cow.activityLevel.toFixed(1)}
+                      </Text>
+                    </View>
+                    
+                    <View style={styles.statItem}>
+                      <Text style={styles.statLabel}>לחץ</Text>
+                      <Text style={[
+                        styles.statValue,
+                        { color: cow.stressLevel > 7 ? '#ff6b6b' : 'black' }
+                      ]}>
+                        {cow.stressLevel.toFixed(1)}
+                      </Text>
+                    </View>
+                    
+                    <View style={styles.statItem}>
+                      <Text style={styles.statLabel}>דופק</Text>
+                      <Text style={[
+                        styles.statValue,
+                        { color: cow.heartRate > 90 ? '#ff6b6b' : 'black' }
+                      ]}>
+                        {cow.heartRate}
+                      </Text>
+                    </View>
+                    
+                    <View style={styles.statItem}>
+                      <Text style={styles.statLabel}>ציון חריגה</Text>
+                      <Text style={[
+                        styles.statValue,
+                        { color: cow.anomalyScore > 0.7 ? '#ff6b6b' : 'black' }
+                      ]}>
+                        {cow.anomalyScore.toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  <Text style={styles.lastUpdated}>
+                    עדכון אחרון: {new Date(cow.lastUpdated).toLocaleTimeString()}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
           
-          {filteredAnomalies.map(anomaly => (
-            <AnomalyCard 
-              key={anomaly.id} 
-              anomaly={anomaly} 
-              onPress={() => setSelectedAnomaly(anomaly)} 
-            />
-          ))}
-          
-          {filteredAnomalies.length === 0 && (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No anomalies found</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>מידע על רעידות אדמה</Text>
+            <View style={styles.infoCard}>
+              <Text style={styles.infoTitle}>כיצד פרות יכולות לחזות רעידות אדמה?</Text>
+              <Text style={styles.infoText}>
+                מחקרים מראים שבעלי חיים, כולל פרות, יכולים לחוש בשינויים סביבתיים מיקרוסקופיים שקודמים לרעידות אדמה. 
+                אלה כוללים שינויים בשדה המגנטי, גזים שנפלטים מהאדמה, ורעידות קטנות שבני אדם אינם מסוגלים להרגיש.
+              </Text>
+              <Text style={styles.infoText}>
+                המערכת שלנו מנטרת דפוסי התנהגות חריגים בקרב קבוצות פרות, כמו עלייה פתאומית ברמות הלחץ, 
+                שינויים בדפוסי תנועה, או התקבצות באזורים מסוימים - כל אלה עשויים להצביע על תחושת סכנה מתקרבת.
+              </Text>
             </View>
-          )}
+          </View>
         </>
       )}
     </ScrollView>
@@ -347,260 +240,134 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 16,
-    marginBottom: 12,
+    textAlign: 'center',
   },
   loader: {
     marginTop: 50,
   },
-  filterContainer: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
-    elevation: 2,
+  section: {
+    marginBottom: 24,
   },
-  filterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  filterLabel: {
-    fontSize: 16,
-  },
-  typeFilterContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  typeFilter: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#dee2e6',
-    marginHorizontal: 2,
-    borderRadius: 4,
-  },
-  activeTypeFilter: {
-    backgroundColor: '#4dabf7',
-    borderColor: '#4dabf7',
-  },
-  typeFilterText: {
-    color: '#495057',
-  },
-  activeTypeFilterText: {
-    color: 'white',
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
+    marginBottom: 12,
   },
-  anomalyCard: {
+  riskCard: {
     backgroundColor: 'white',
     borderRadius: 8,
     padding: 16,
-    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 1.41,
     elevation: 2,
   },
-  anomalyHeader: {
+  riskHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
   },
-  anomalyTypeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  anomalyTypeDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  anomalyType: {
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  anomalyTime: {
-    fontSize: 12,
-    color: '#666',
-  },
-  anomalyDescription: {
+  riskTitle: {
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  riskBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 16,
+  },
+  riskBadgeText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  riskDescription: {
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  confidenceBar: {
+    height: 8,
+    backgroundColor: '#e9ecef',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  confidenceFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  cowCard: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+    elevation: 2,
+  },
+  cowHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
   },
-  anomalyStats: {
+  cowName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 16,
+  },
+  statusText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  cowStats: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  anomalyStat: {
+  statItem: {
     alignItems: 'center',
   },
-  anomalyStatLabel: {
+  statLabel: {
     fontSize: 12,
     color: '#666',
     marginBottom: 4,
   },
-  anomalyStatValue: {
+  statValue: {
     fontSize: 16,
     fontWeight: 'bold',
   },
-  anomalyFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  anomalyModel: {
+  lastUpdated: {
     fontSize: 12,
     color: '#666',
+    textAlign: 'right',
   },
-  anomalyStatus: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  anomalyStatusText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  detailContainer: {
+  infoCard: {
     backgroundColor: 'white',
     borderRadius: 8,
     padding: 16,
-    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 1.41,
     elevation: 2,
   },
-  detailHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  detailTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  closeButton: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#666',
-  },
-  detailDescription: {
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  detailSection: {
-    marginBottom: 16,
-  },
-  detailSectionTitle: {
+  infoTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 8,
   },
-  cowList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  cowItem: {
-    backgroundColor: '#e9ecef',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
+  infoText: {
     marginBottom: 8,
-  },
-  cowName: {
-    fontSize: 14,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  featureContainer: {
-    marginTop: 8,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  featureLabel: {
-    width: '30%',
-    fontSize: 14,
-  },
-  featureBarContainer: {
-    flex: 1,
-    height: 12,
-    backgroundColor: '#e9ecef',
-    borderRadius: 6,
-    overflow: 'hidden',
-    marginHorizontal: 8,
-  },
-  featureBar: {
-    height: '100%',
-    backgroundColor: '#4dabf7',
-    borderRadius: 6,
-  },
-  featureValue: {
-    width: '10%',
-    fontSize: 14,
-    textAlign: 'right',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 16,
-  },
-  actionButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginHorizontal: 4,
-  },
-  acknowledgeButton: {
-    backgroundColor: '#4dabf7',
-  },
-  investigateButton: {
-    backgroundColor: '#ffa94d',
-  },
-  actionButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  emptyState: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: '#666',
+    lineHeight: 20,
   },
 });
 

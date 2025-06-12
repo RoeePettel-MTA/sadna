@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-import { ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
+import { router } from 'expo-router';
+import { monitorAndAlert } from '../services/AnomalyDetectionService';
+import { registerForPushNotificationsAsync } from '../services/NotificationService';
 
 // Mock data - in a real app, this would be imported from a data service
 const mockCowData = [
@@ -135,13 +137,16 @@ const ActivityTimeline = ({ events }) => (
 );
 
 // Alert banner component
-const AlertBanner = ({ message, severity }) => (
-  <View style={[
-    styles.alertBanner,
-    { backgroundColor: severity === 'Critical' ? '#ff6b6b' : '#ffa94d' }
-  ]}>
+const AlertBanner = ({ message, severity, onPress }) => (
+  <TouchableOpacity 
+    style={[
+      styles.alertBanner,
+      { backgroundColor: severity === 'Critical' ? '#ff6b6b' : '#ffa94d' }
+    ]}
+    onPress={onPress}
+  >
     <Text style={styles.alertText}>{message}</Text>
-  </View>
+  </TouchableOpacity>
 );
 
 // Cow summary card component
@@ -186,6 +191,23 @@ const DashboardScreen: React.FC = () => {
   const [cowData, setCowData] = useState(mockCowData);
   const [alerts, setAlerts] = useState(mockAlerts);
   const [loading, setLoading] = useState(false);
+  const [pushToken, setPushToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    // רישום להתראות רק במובייל
+    const setupNotifications = async () => {
+      try {
+        if (Platform.OS !== 'web') {
+          const token = await registerForPushNotificationsAsync();
+          setPushToken(token);
+        }
+      } catch (error) {
+        console.log('Error setting up notifications:', error);
+      }
+    };
+
+    setupNotifications();
+  }, []);
 
   useEffect(() => {
     // In a real app, this would fetch data from your API
@@ -194,6 +216,10 @@ const DashboardScreen: React.FC = () => {
       try {
         // Simulate API call
         await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // בדיקת אנומליות ושליחת התראות
+        await monitorAndAlert(mockCowData);
+        
         // In production, replace with actual API calls
         // const response = await fetch('your-api-endpoint');
         // const data = await response.json();
@@ -222,14 +248,33 @@ const DashboardScreen: React.FC = () => {
     }))
   ).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
+  const handleAlertPress = () => {
+    Alert.alert(
+      'התראת חירום: חשש לרעידת אדמה',
+      'זוהתה התנהגות חריגה בקרב הפרות המעידה על חשש לרעידת אדמה. האם ברצונך לצפות בפרטים נוספים?',
+      [
+        { text: 'לא', style: 'cancel' },
+        { text: 'כן', onPress: () => router.push('/screens/AnomalyDetectionScreen') }
+      ]
+    );
+  };
+
+  const handleCowPress = (cow) => {
+    router.push({
+      pathname: '/screens/CowDetailScreen',
+      params: { cowId: cow.id }
+    });
+  };
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Cow Behavior Monitoring</Text>
       
       {alerts.some(alert => alert.severity === 'Critical') && (
         <AlertBanner 
-          message="Critical anomaly detected! Potential earthquake precursor." 
+          message="⚠️ התראת חירום: חשש לרעידת אדמה!" 
           severity="Critical" 
+          onPress={handleAlertPress}
         />
       )}
       
@@ -272,7 +317,7 @@ const DashboardScreen: React.FC = () => {
               <CowSummaryCard 
                 key={cow.id}
                 cow={cow}
-                onPress={() => {/* Navigate to cow detail */}}
+                onPress={() => handleCowPress(cow)}
               />
             ))}
         </>

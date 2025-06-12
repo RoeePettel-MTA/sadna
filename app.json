@@ -33,6 +33,10 @@
       "expo-location",
       "expo-sensors",
       "expo-notifications"
-    ]
+    ],
+    "notification": {
+      "vapidPublicKey": "BHpF_VSocSrb54W4EnJ88Ccgsi9GZheGPxWdr8xB1hxgFHwpdM5fyalgAhSeo76Bzf2F-3KnOwN8etKr2UM-0qk",
+      "serviceWorkerPath": "firebase-messaging-sw.js"
+    }
   }
 }
