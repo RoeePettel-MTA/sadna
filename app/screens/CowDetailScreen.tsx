@@ -243,8 +243,6 @@ const CowDetailScreen = ({ route }) => {
   };
 
   const handleAddDataPoint = () => {
-    console.log('handleAddDataPoint called with:', newDataPoint);
-    
     if (!newDataPoint.activityLevel || !newDataPoint.stressLevel || !newDataPoint.heartRate) {
       Alert.alert('שגיאה', 'אנא מלא את כל השדות');
       return;
@@ -258,29 +256,24 @@ const CowDetailScreen = ({ route }) => {
         stressLevel: parseFloat(newDataPoint.stressLevel),
         heartRate: parseInt(newDataPoint.heartRate)
       };
-      
-      console.log('Created dataPoint:', dataPoint);
-      console.log('Current historicalData:', historicalData);
 
       // הסרת נתון קיים באותו תאריך אם קיים
       const filteredData = historicalData.filter(item => item.date !== newDataPoint.date);
       const updatedData = [...filteredData, dataPoint].sort((a, b) => new Date(a.date) - new Date(b.date));
-      
-      console.log('Updated data:', updatedData);
-      
-      // סגירת המודל מיד
-      setShowAddDataModal(false);
       
       // עדכון נתוני הפרה בשירות
       if (cowData) {
         updateCow(selectedCowId, { ...cowData, historicalData: updatedData });
       }
       
-      // עדכון הנתונים המקומיים וכפיית ריענון
-      const newRefreshKey = Date.now();
-      setRefreshKey(newRefreshKey);
-      setHistoricalData([]);
-      setTimeout(() => setHistoricalData(updatedData), 100);
+      // עדכון מיידי של הנתונים המקומיים
+      setHistoricalData(updatedData);
+      
+      // כפיית ריענון הגרפים
+      setRefreshKey(Date.now());
+      
+      // סגירת המודל
+      setShowAddDataModal(false);
       
       // ניקוי השדות
       setNewDataPoint({
@@ -290,7 +283,7 @@ const CowDetailScreen = ({ route }) => {
         date: new Date().toISOString().split('T')[0]
       });
       
-      Alert.alert('הצלחה', `נתון חדש נוסף!\nתאריך: ${newDataPoint.date}\nפעילות: ${newDataPoint.activityLevel}`);
+      Alert.alert('הצלחה', `נתון חדש נוסף בהצלחה!`);
     } catch (error) {
       Alert.alert('שגיאה', 'אירעה שגיאה בשמירת הנתון');
     }
@@ -467,10 +460,7 @@ const CowDetailScreen = ({ route }) => {
             <Text style={styles.sectionTitle}>נתונים היסטוריים</Text>
             <TouchableOpacity 
               style={styles.addDataButton} 
-              onPress={() => {
-                Alert.alert('בדיקה', 'כפתור הוסף נתון נלחץ!');
-                setShowAddDataModal(true);
-              }}
+              onPress={() => setShowAddDataModal(true)}
             >
               <Text style={styles.addDataButtonText}>+ הוסף נתון</Text>
             </TouchableOpacity>
@@ -552,7 +542,6 @@ const CowDetailScreen = ({ route }) => {
               style={styles.modalInput}
               value={newDataPoint.date}
               onChangeText={(text) => setNewDataPoint({...newDataPoint, date: text})}
-              placeholder="YYYY-MM-DD"
             />
           </View>
           
@@ -563,7 +552,6 @@ const CowDetailScreen = ({ route }) => {
               value={newDataPoint.activityLevel}
               onChangeText={(text) => setNewDataPoint({...newDataPoint, activityLevel: text})}
               keyboardType="numeric"
-              placeholder="5.0"
             />
           </View>
           
@@ -574,7 +562,6 @@ const CowDetailScreen = ({ route }) => {
               value={newDataPoint.stressLevel}
               onChangeText={(text) => setNewDataPoint({...newDataPoint, stressLevel: text})}
               keyboardType="numeric"
-              placeholder="3.0"
             />
           </View>
           
@@ -585,29 +572,20 @@ const CowDetailScreen = ({ route }) => {
               value={newDataPoint.heartRate}
               onChangeText={(text) => setNewDataPoint({...newDataPoint, heartRate: text})}
               keyboardType="numeric"
-              placeholder="70"
             />
           </View>
           
           <View style={styles.modalButtons}>
             <TouchableOpacity 
               style={styles.modalCancelButton} 
-              onPress={() => {
-                setShowAddDataModal(false);
-                Alert.alert('בדיקה', 'כפתור ביטול עובד!');
-              }}
+              onPress={() => setShowAddDataModal(false)}
             >
               <Text style={styles.modalCancelText}>ביטול</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={[styles.modalSaveButton, { backgroundColor: '#ff0000' }]} 
-              onPress={() => {
-                setShowAddDataModal(false);
-                Alert.alert('בדיקה', 'כפתור שמירה עובד!', [
-                  { text: 'OK', onPress: () => handleAddDataPoint() }
-                ]);
-              }}
+              style={styles.modalSaveButton} 
+              onPress={handleAddDataPoint}
             >
               <Text style={styles.modalSaveText}>שמור</Text>
             </TouchableOpacity>

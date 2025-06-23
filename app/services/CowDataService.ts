@@ -17,6 +17,13 @@ export interface CowData {
     timestamp: string;
     value: string;
   }>;
+  historicalData?: Array<{
+    date: string;
+    dayName: string;
+    activityLevel: number;
+    stressLevel: number;
+    heartRate: number;
+  }>;
 }
 
 // נתוני פרות ראשוניים

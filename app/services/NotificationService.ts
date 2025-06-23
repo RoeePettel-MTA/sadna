@@ -93,7 +93,7 @@ export async function sendEarthquakeAlert(confidence: number, details: string) {
   const body = `זוהתה התנהגות חריגה בפרות המעידה על חשש לרעידת אדמה (רמת ביטחון: ${Math.round(confidence * 100)}%). ${details}`;
   
   // שמירת התראה להצגה באתר
-  if (typeof window !== 'undefined') {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
     localStorage.setItem('earthquakeAlert', JSON.stringify({
       title,
       body,
@@ -126,7 +126,7 @@ export async function sendAnomalyAlert(cowName: string, anomalyType: string, sev
 
 // פונקציה לקבלת התראת רעידת אדמה
 export function getEarthquakeAlert() {
-  if (typeof window !== 'undefined') {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
     const alert = localStorage.getItem('earthquakeAlert');
     return alert ? JSON.parse(alert) : null;
   }
@@ -135,7 +135,7 @@ export function getEarthquakeAlert() {
 
 // פונקציה למחיקת התראת רעידת אדמה
 export function clearEarthquakeAlert() {
-  if (typeof window !== 'undefined') {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
     localStorage.removeItem('earthquakeAlert');
   }
 }
