@@ -1,13 +1,18 @@
-import { Ionicons } from '@expo/vector-icons';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
 import AnomalyDetectionScreen from '../screens/AnomalyDetectionScreen';
 import CowDetailScreen from '../screens/CowDetailScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import FarmManagementScreen from '../screens/FarmManagementScreen';
 import { logout } from '../services/AuthService';
+
+// Import Ionicons only for mobile platforms
+let Ionicons;
+if (Platform.OS !== 'web') {
+  Ionicons = require('@expo/vector-icons').Ionicons;
+}
 
 const Drawer = createDrawerNavigator();
 
@@ -53,15 +58,19 @@ const SidebarContent = props => {
           };
           
           // Get icon based on route name
-          let iconName;
+          let iconName, iconText;
           if (route.name === 'Dashboard') {
             iconName = 'home';
+            iconText = '🏠';
           } else if (route.name === 'CowDetail') {
             iconName = 'information-circle';
+            iconText = 'ℹ️';
           } else if (route.name === 'AnomalyDetection') {
             iconName = 'warning';
+            iconText = '⚠️';
           } else if (route.name === 'FarmManagement') {
             iconName = 'settings';
+            iconText = '⚙️';
           }
           
           return (
@@ -69,12 +78,16 @@ const SidebarContent = props => {
               key={route.key} 
               style={[styles.sidebarItem, isFocused && styles.sidebarItemActive]}
             >
-              <Ionicons 
-                name={iconName} 
-                size={24} 
-                color={isFocused ? '#4dabf7' : '#495057'} 
-                style={styles.sidebarIcon}
-              />
+              {Platform.OS !== 'web' && Ionicons ? (
+                <Ionicons 
+                  name={iconName} 
+                  size={24} 
+                  color={isFocused ? '#4dabf7' : '#495057'} 
+                  style={styles.sidebarIcon}
+                />
+              ) : (
+                <Text style={[styles.sidebarIcon, { fontSize: 20 }]}>{iconText}</Text>
+              )}
               <Text 
                 style={[styles.sidebarLabel, isFocused && styles.sidebarLabelActive]}
                 onPress={onPress}
@@ -87,7 +100,11 @@ const SidebarContent = props => {
       </View>
       
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Ionicons name="log-out" size={24} color="#ff6b6b" style={styles.sidebarIcon} />
+        {Platform.OS !== 'web' && Ionicons ? (
+          <Ionicons name="log-out" size={24} color="#ff6b6b" style={styles.sidebarIcon} />
+        ) : (
+          <Text style={[styles.sidebarIcon, { fontSize: 20, color: '#ff6b6b' }]}>🚪</Text>
+        )}
         <Text style={styles.logoutText}>התנתק</Text>
       </TouchableOpacity>
       
@@ -139,6 +156,7 @@ const DrawerNavigator = () => (
         title: 'Farm Management',
       }}
     />
+
   </Drawer.Navigator>
 );
 

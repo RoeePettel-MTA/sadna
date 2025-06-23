@@ -1,66 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { detectEarthquakePrecursor } from '../services/AnomalyDetectionService';
+import { getAllCows, CowData } from '../services/CowDataService';
 
-// Mock data - in a real app, this would be imported from a data service
-const mockCowData = [
-  {
-    id: 'cow1',
-    name: 'Bessie',
-    activityLevel: 7.2,
-    stressLevel: 3.5,
-    heartRate: 65,
-    anomalyScore: 0.2,
-    location: { x: 45, y: 32 },
-    lastUpdated: new Date().toISOString(),
-  },
-  {
-    id: 'cow3',
-    name: 'Buttercup',
-    activityLevel: 8.9,
-    stressLevel: 8.7,
-    heartRate: 95,
-    anomalyScore: 0.85,
-    location: { x: 12, y: 78 },
-    lastUpdated: new Date().toISOString(),
-  },
-  {
-    id: 'cow4',
-    name: 'Clover',
-    activityLevel: 9.1,
-    stressLevel: 7.9,
-    heartRate: 88,
-    anomalyScore: 0.72,
-    location: { x: 67, y: 22 },
-    lastUpdated: new Date().toISOString(),
-  },
-  {
-    id: 'cow5',
-    name: 'Daisy',
-    activityLevel: 8.5,
-    stressLevel: 8.2,
-    heartRate: 92,
-    anomalyScore: 0.78,
-    location: { x: 34, y: 45 },
-    lastUpdated: new Date().toISOString(),
-  }
-];
+
+
 
 const AnomalyDetectionScreen = () => {
   const [loading, setLoading] = useState(true);
   const [earthquakeRisk, setEarthquakeRisk] = useState(null);
-  const [anomalyCows, setAnomalyCows] = useState([]);
+  const [anomalyCows, setAnomalyCows] = useState<CowData[]>([]);
 
   useEffect(() => {
     const analyzeData = async () => {
       setLoading(true);
       try {
+        // טעינת נתוני פרות מהשירות
+        const cowData = getAllCows();
+        
         // בדיקת חשש לרעידת אדמה
-        const risk = await detectEarthquakePrecursor(mockCowData);
-        setEarthquakeRisk(risk);
+        const risk = await detectEarthquakePrecursor(cowData);
+        
+        // בדיקה נוספת לפרות בודדות עם ציון אנומליה גבוה
+        const highAnomalyCows = cowData.filter(cow => cow.anomalyScore > 0.9);
+        
+        if (highAnomalyCows.length > 0 && !risk.detected) {
+          const maxScore = Math.max(...highAnomalyCows.map(cow => cow.anomalyScore));
+          setEarthquakeRisk({
+            detected: true,
+            confidence: maxScore,
+            details: `${highAnomalyCows.length} פרות מראות ציון אנומליה קריטי מעל 0.9. הפרות: ${highAnomalyCows.map(cow => cow.name).join(', ')}`
+          });
+        } else {
+          setEarthquakeRisk(risk);
+        }
         
         // מיון הפרות לפי רמת האנומליה
-        const sortedCows = [...mockCowData].sort((a, b) => b.anomalyScore - a.anomalyScore);
+        const sortedCows = [...cowData].sort((a, b) => b.anomalyScore - a.anomalyScore);
         setAnomalyCows(sortedCows);
       } catch (error) {
         console.error('Error analyzing data:', error);
@@ -70,6 +46,11 @@ const AnomalyDetectionScreen = () => {
     };
     
     analyzeData();
+    
+    // עדכון כל 10 שניות לזיהוי מהיר של פרות חדשות
+    const interval = setInterval(analyzeData, 10000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const getRiskLevel = (confidence) => {
@@ -127,7 +108,7 @@ const AnomalyDetectionScreen = () => {
               <Text style={styles.riskDescription}>
                 {earthquakeRisk?.detected 
                   ? `זוהה חשש לרעידת אדמה ברמת ביטחון של ${Math.round(earthquakeRisk.confidence * 100)}%. ${earthquakeRisk.details}`
-                  : 'לא זוהה סיכון לרעידת אדמה בנתונים הנוכחיים.'}
+                  : `לא זוהה סיכון לרעידת אדמה בנתונים הנוכחיים. ${anomalyCows.length > 0 ? `נמצאו ${anomalyCows.filter(cow => cow.anomalyScore > 0.7).length} פרות עם התנהגות חריגה.` : ''}`}
               </Text>
               
               {earthquakeRisk?.detected && (
@@ -191,6 +172,8 @@ const AnomalyDetectionScreen = () => {
                       </Text>
                     </View>
                     
+
+                    
                     <View style={styles.statItem}>
                       <Text style={styles.statLabel}>ציון חריגה</Text>
                       <Text style={[
@@ -204,6 +187,9 @@ const AnomalyDetectionScreen = () => {
                   
                   <Text style={styles.lastUpdated}>
                     עדכון אחרון: {new Date(cow.lastUpdated).toLocaleTimeString()}
+                  </Text>
+                  <Text style={styles.lastUpdated}>
+                    מיקום: {cow.location} • חיישן: {cow.sensorId}
                   </Text>
                 </View>
               );
@@ -330,6 +316,7 @@ const styles = StyleSheet.create({
   },
   cowStats: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     marginBottom: 12,
   },

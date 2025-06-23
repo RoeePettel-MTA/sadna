@@ -2,53 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { monitorAndAlert } from '../services/AnomalyDetectionService';
-import { registerForPushNotificationsAsync } from '../services/NotificationService';
+import { registerForPushNotificationsAsync, getEarthquakeAlert, clearEarthquakeAlert } from '../services/NotificationService';
+import { getAllCows, CowData } from '../services/CowDataService';
 
-// Mock data - in a real app, this would be imported from a data service
-const mockCowData = [
-  {
-    id: 'cow1',
-    name: 'Bessie',
-    activityLevel: 7.2,
-    stressLevel: 3.5,
-    heartRate: 65,
-    anomalyScore: 0.2,
-    location: { x: 45, y: 32 },
-    lastUpdated: new Date().toISOString(),
-    recentEvents: [
-      { type: 'movement', timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(), value: 'walking' },
-      { type: 'feeding', timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(), value: 'grazing' }
-    ]
-  },
-  {
-    id: 'cow3',
-    name: 'Buttercup',
-    activityLevel: 5.1,
-    stressLevel: 8.7,
-    heartRate: 95,
-    anomalyScore: 0.85,
-    location: { x: 12, y: 78 },
-    lastUpdated: new Date().toISOString(),
-    recentEvents: [
-      { type: 'movement', timestamp: new Date(Date.now() - 1000 * 60 * 2).toISOString(), value: 'agitated' },
-      { type: 'alert', timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(), value: 'unusual behavior' }
-    ]
-  },
-  {
-    id: 'cow4',
-    name: 'Clover',
-    activityLevel: 6.3,
-    stressLevel: 7.9,
-    heartRate: 88,
-    anomalyScore: 0.72,
-    location: { x: 67, y: 22 },
-    lastUpdated: new Date().toISOString(),
-    recentEvents: [
-      { type: 'movement', timestamp: new Date(Date.now() - 1000 * 60 * 7).toISOString(), value: 'pacing' },
-      { type: 'alert', timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString(), value: 'elevated heart rate' }
-    ]
-  }
-];
+
+// Import Ionicons only for mobile platforms
+let Ionicons;
+if (Platform.OS !== 'web') {
+  Ionicons = require('@expo/vector-icons').Ionicons;
+}
+
+
 
 const mockAlerts = [
   {
@@ -65,30 +29,40 @@ const mockAlerts = [
 ];
 
 // Simple chart component for activity levels
-const LineChart = ({ data }) => (
-  <View style={styles.chartContainer}>
-    <View style={styles.chartContent}>
-      {data.map((item, index) => (
-        <View 
-          key={item.id} 
-          style={[
-            styles.chartBar, 
-            { 
-              height: item.value * 10, 
-              backgroundColor: item.value > 7 ? '#ff6b6b' : '#4dabf7',
-              marginLeft: index > 0 ? 10 : 0
-            }
-          ]} 
-        />
-      ))}
+const LineChart = ({ data }) => {
+  const maxHeight = 120; // גובה מקסימלי של הגרף
+  const maxValue = Math.max(...data.map(item => item.value), 10); // ערך מקסימלי או 10
+  
+  return (
+    <View style={styles.chartContainer}>
+      <View style={styles.chartContent}>
+        {data.map((item, index) => {
+          const barHeight = (item.value / maxValue) * maxHeight;
+          return (
+            <View key={item.id} style={styles.chartBarContainer}>
+              <Text style={styles.chartValue}>{item.value.toFixed(1)}</Text>
+              <View 
+                style={[
+                  styles.chartBar, 
+                  { 
+                    height: barHeight,
+                    backgroundColor: item.value > 7 ? '#ff6b6b' : '#4dabf7',
+                    marginLeft: index > 0 ? 10 : 0
+                  }
+                ]} 
+              />
+            </View>
+          );
+        })}
+      </View>
+      <View style={styles.chartLabels}>
+        {data.map(item => (
+          <Text key={item.id} style={styles.chartLabel}>{item.name}</Text>
+        ))}
+      </View>
     </View>
-    <View style={styles.chartLabels}>
-      {data.map(item => (
-        <Text key={item.id} style={styles.chartLabel}>{item.name}</Text>
-      ))}
-    </View>
-  </View>
-);
+  );
+};
 
 // Simple heatmap component for movement patterns
 const HeatMap = ({ data }) => (
@@ -163,7 +137,12 @@ const CowSummaryCard = ({ cow, onPress }) => (
     <View style={styles.cowCardStats}>
       <View style={styles.statItem}>
         <Text style={styles.statLabel}>Activity</Text>
-        <Text style={styles.statValue}>{cow.activityLevel.toFixed(1)}</Text>
+        <Text style={[
+          styles.statValue,
+          { color: cow.activityLevel > 8 || cow.activityLevel < 2 ? '#ff6b6b' : 'black' }
+        ]}>
+          {cow.activityLevel.toFixed(1)}
+        </Text>
       </View>
       <View style={styles.statItem}>
         <Text style={styles.statLabel}>Stress</Text>
@@ -176,8 +155,14 @@ const CowSummaryCard = ({ cow, onPress }) => (
       </View>
       <View style={styles.statItem}>
         <Text style={styles.statLabel}>Heart Rate</Text>
-        <Text style={styles.statValue}>{cow.heartRate}</Text>
+        <Text style={[
+          styles.statValue,
+          { color: cow.heartRate > 90 || cow.heartRate < 50 ? '#ff6b6b' : 'black' }
+        ]}>
+          {cow.heartRate}
+        </Text>
       </View>
+
     </View>
     
     <Text style={styles.lastEvent}>
@@ -188,8 +173,9 @@ const CowSummaryCard = ({ cow, onPress }) => (
 );
 
 const DashboardScreen: React.FC = () => {
-  const [cowData, setCowData] = useState(mockCowData);
+  const [cowData, setCowData] = useState<CowData[]>([]);
   const [alerts, setAlerts] = useState(mockAlerts);
+  const [earthquakeAlert, setEarthquakeAlert] = useState(null);
   const [loading, setLoading] = useState(false);
   const [pushToken, setPushToken] = useState<string | null>(null);
 
@@ -210,21 +196,16 @@ const DashboardScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // In a real app, this would fetch data from your API
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const cows = getAllCows();
+        setCowData(cows);
+        await monitorAndAlert(cows);
         
-        // בדיקת אנומליות ושליחת התראות
-        await monitorAndAlert(mockCowData);
-        
-        // In production, replace with actual API calls
-        // const response = await fetch('your-api-endpoint');
-        // const data = await response.json();
-        // setCowData(data.cows);
-        // setAlerts(data.alerts);
+        // בדיקת התראות רעידת אדמה
+        const alert = getEarthquakeAlert();
+        setEarthquakeAlert(alert);
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -232,12 +213,19 @@ const DashboardScreen: React.FC = () => {
       }
     };
 
+    // טעינה ראשונית
     fetchData();
     
-    // Set up real-time updates
-    const intervalId = setInterval(fetchData, 30000); // Update every 30 seconds
+    // עדכון כל 10 שניות לזיהוי מהיר של פרות חדשות
+    const interval = setInterval(() => {
+      const updatedCows = getAllCows();
+      setCowData(updatedCows);
+      // בדיקת התראות רעידת אדמה מחדש
+      const alert = getEarthquakeAlert();
+      setEarthquakeAlert(alert);
+    }, 10000);
     
-    return () => clearInterval(intervalId);
+    return () => clearInterval(interval);
   }, []);
 
   // Get all events from all cows for the timeline
@@ -260,21 +248,36 @@ const DashboardScreen: React.FC = () => {
   };
 
   const handleCowPress = (cow) => {
-    router.push({
-      pathname: '/screens/CowDetailScreen',
-      params: { cowId: cow.id }
-    });
+    router.push(`/(drawer)/CowDetail?cowId=${cow.id}`);
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Cow Behavior Monitoring</Text>
+    <View style={styles.wrapper}>
+      <ScrollView style={styles.container}>
+        <Text style={styles.title}>Cow Behavior Monitoring</Text>
       
-      {alerts.some(alert => alert.severity === 'Critical') && (
+      {((alerts.some(alert => alert.severity === 'Critical') || earthquakeAlert?.active) && 
+        (cowData.some(cow => cow.anomalyScore > 0.9) || earthquakeAlert?.active)) && (
         <AlertBanner 
-          message="⚠️ התראת חירום: חשש לרעידת אדמה!" 
+          message={earthquakeAlert?.active ? earthquakeAlert.title : "⚠️ התראת חירום: חשש לרעידת אדמה!"} 
           severity="Critical" 
-          onPress={handleAlertPress}
+          onPress={() => {
+            if (earthquakeAlert?.active) {
+              Alert.alert(
+                earthquakeAlert.title,
+                earthquakeAlert.body,
+                [
+                  { text: 'סגור התראה', onPress: () => {
+                    clearEarthquakeAlert();
+                    setEarthquakeAlert(null);
+                  }},
+                  { text: 'צפה פרטים', onPress: () => router.push('/screens/AnomalyDetectionScreen') }
+                ]
+              );
+            } else {
+              handleAlertPress();
+            }
+          }}
         />
       )}
       
@@ -305,32 +308,41 @@ const DashboardScreen: React.FC = () => {
           />
           
           <Text style={styles.sectionTitle}>Movement Patterns</Text>
-          <HeatMap data={cowData} />
+          <HeatMap data={cowData.map(cow => ({
+            ...cow,
+            location: cow.gpsLocation
+          }))} />
           
           <Text style={styles.sectionTitle}>Recent Activity</Text>
           <ActivityTimeline events={allEvents.slice(0, 5)} />
           
-          <Text style={styles.sectionTitle}>Cows Requiring Attention</Text>
-          {cowData
-            .filter(cow => cow.stressLevel > 7 || cow.anomalyScore > 0.7)
-            .map(cow => (
-              <CowSummaryCard 
-                key={cow.id}
-                cow={cow}
-                onPress={() => handleCowPress(cow)}
-              />
-            ))}
+          <Text style={styles.sectionTitle}>All Cows</Text>
+          {cowData.map(cow => (
+            <CowSummaryCard 
+              key={cow.id}
+              cow={cow}
+              onPress={() => handleCowPress(cow)}
+            />
+          ))}
+          
+
         </>
       )}
-    </ScrollView>
+      </ScrollView>
+      
+
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: '#f5f5f5',
   },
   title: {
     fontSize: 24,
@@ -400,10 +412,21 @@ const styles = StyleSheet.create({
     height: 150,
     justifyContent: 'space-around',
   },
+  chartBarContainer: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    height: 140,
+  },
   chartBar: {
     width: 30,
     borderTopLeftRadius: 4,
     borderTopRightRadius: 4,
+  },
+  chartValue: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 4,
+    color: '#333',
   },
   chartLabels: {
     flexDirection: 'row',
@@ -503,6 +526,7 @@ const styles = StyleSheet.create({
   },
   cowCardStats: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     marginBottom: 8,
   },
@@ -513,6 +537,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
   },
+
 });
 
 export default DashboardScreen;

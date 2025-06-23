@@ -3,41 +3,54 @@ import { Platform } from 'react-native';
 
 // סף לזיהוי אנומליה
 const ANOMALY_THRESHOLD = 0.7;
-const EARTHQUAKE_THRESHOLD = 0.85;
+const EARTHQUAKE_THRESHOLD = 0.9;
 
 // פונקציה לבדיקת אנומליות בנתוני פרה
 export const detectAnomaly = (cowData) => {
+  let maxScore = 0;
+  let detectedType = null;
+  let severity = null;
+  
   // בדיקת רמת פעילות חריגה
   if (cowData.activityLevel > 8 || cowData.activityLevel < 2) {
-    return {
-      detected: true,
-      type: 'activity',
-      severity: cowData.activityLevel > 8 ? 'high' : 'low',
-      score: Math.abs(cowData.activityLevel - 5) / 5
-    };
+    const activityScore = Math.abs(cowData.activityLevel - 5) / 5;
+    if (activityScore > maxScore) {
+      maxScore = activityScore;
+      detectedType = 'activity';
+      severity = cowData.activityLevel > 8 ? 'high' : 'low';
+    }
   }
 
   // בדיקת רמת לחץ חריגה
   if (cowData.stressLevel > 7) {
-    return {
-      detected: true,
-      type: 'stress',
-      severity: 'high',
-      score: cowData.stressLevel / 10
-    };
+    const stressScore = cowData.stressLevel / 10;
+    if (stressScore > maxScore) {
+      maxScore = stressScore;
+      detectedType = 'stress';
+      severity = 'high';
+    }
   }
 
   // בדיקת דופק חריג
   if (cowData.heartRate > 90 || cowData.heartRate < 50) {
+    const heartScore = Math.abs(cowData.heartRate - 70) / 30;
+    if (heartScore > maxScore) {
+      maxScore = heartScore;
+      detectedType = 'heart_rate';
+      severity = cowData.heartRate > 90 ? 'high' : 'low';
+    }
+  }
+
+  if (maxScore > 0) {
     return {
       detected: true,
-      type: 'heart_rate',
-      severity: cowData.heartRate > 90 ? 'high' : 'low',
-      score: Math.abs(cowData.heartRate - 70) / 30
+      type: detectedType,
+      severity: severity,
+      score: Math.min(maxScore, 1.0) // הגבלה ל-1.0 מקסימום
     };
   }
 
-  return { detected: false };
+  return { detected: false, score: 0 };
 };
 
 // פונקציה לבדיקת אנומליות בקבוצת פרות
@@ -110,7 +123,7 @@ const analyzeMovementPatterns = (cowsData) => {
   
   // בדיקה אם הפרות מראות תנועה מכוונת בכיוון מסוים
   const directedMovement = checkDirectedMovement(cowsData);
-  
+  ז
   // בדיקה אם הפרות מראות חוסר מנוחה כללי
   const restlessness = checkRestlessness(cowsData);
   
@@ -154,6 +167,14 @@ export const monitorAndAlert = async (cowsData) => {
           anomaly.type === 'activity' ? 'רמת פעילות חריגה' :
           anomaly.type === 'stress' ? 'רמת לחץ גבוהה' : 'דופק חריג',
           anomaly.severity === 'high' ? 'גבוהה' : 'נמוכה'
+        );
+      }
+      
+      // בדיקה מיוחדת לציון אנומליה גבוה מאוד
+      if (cow.anomalyScore > 0.9) {
+        await sendEarthquakeAlert(
+          cow.anomalyScore,
+          `הפרה "${cow.name}" מראה ציון אנומליה קריטי של ${cow.anomalyScore.toFixed(2)} - חשש לרעידת אדמה!`
         );
       }
     }

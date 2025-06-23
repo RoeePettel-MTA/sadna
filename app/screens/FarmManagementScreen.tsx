@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Switch } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Switch, Alert, Platform } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { getAllCows, addCow, updateCow, deleteCow, createDefaultCowData, CowData } from '../services/CowDataService';
+import { monitorAndAlert } from '../services/AnomalyDetectionService';
 
-// Mock data for farm management
-const mockCows = [
-  { id: 'cow1', name: 'Bessie', sensorId: 'SEN001', location: 'North Pen', active: true },
-  { id: 'cow2', name: 'Daisy', sensorId: 'SEN002', location: 'East Pen', active: true },
-  { id: 'cow3', name: 'Buttercup', sensorId: 'SEN003', location: 'North Pen', active: true },
-  { id: 'cow4', name: 'Clover', sensorId: 'SEN004', location: 'West Pen', active: true },
-  { id: 'cow5', name: 'Milky', sensorId: 'SEN005', location: 'South Pen', active: true },
-];
+// Import Ionicons only for mobile platforms
+let Ionicons;
+if (Platform.OS !== 'web') {
+  Ionicons = require('@expo/vector-icons').Ionicons;
+}
+
+
 
 const mockLocations = [
   { id: 'loc1', name: 'North Pen', cowCount: 2, gpsZone: { lat: 34.0522, lng: -118.2437, radius: 50 } },
@@ -33,13 +34,30 @@ const CowListItem = ({ cow, onEdit, onDelete }) => (
     <View style={styles.listItemContent}>
       <Text style={styles.listItemTitle}>{cow.name}</Text>
       <Text style={styles.listItemSubtitle}>Sensor: {cow.sensorId} • {cow.location}</Text>
+      <Text style={styles.listItemSubtitle}>
+        Activity: {cow.activityLevel?.toFixed(1)} • Stress: {cow.stressLevel?.toFixed(1)} • HR: {cow.heartRate}
+      </Text>
+      <Text style={[
+        styles.listItemSubtitle,
+        { color: cow.anomalyScore > 0.7 ? '#ff6b6b' : '#666' }
+      ]}>
+        Anomaly Score: {cow.anomalyScore?.toFixed(2)}
+      </Text>
     </View>
     <View style={styles.listItemActions}>
       <TouchableOpacity style={styles.actionButton} onPress={() => onEdit(cow)}>
-        <Ionicons name="pencil" size={18} color="#4dabf7" />
+        {Platform.OS !== 'web' && Ionicons ? (
+          <Ionicons name="pencil" size={18} color="#4dabf7" />
+        ) : (
+          <Text style={styles.actionButtonText}>✏️</Text>
+        )}
       </TouchableOpacity>
       <TouchableOpacity style={styles.actionButton} onPress={() => onDelete(cow.id)}>
-        <Ionicons name="trash" size={18} color="#ff6b6b" />
+        {Platform.OS !== 'web' && Ionicons ? (
+          <Ionicons name="trash" size={18} color="#ff6b6b" />
+        ) : (
+          <Text style={styles.actionButtonText}>🗑️</Text>
+        )}
       </TouchableOpacity>
     </View>
   </View>
@@ -56,10 +74,18 @@ const LocationListItem = ({ location, onEdit, onDelete }) => (
     </View>
     <View style={styles.listItemActions}>
       <TouchableOpacity style={styles.actionButton} onPress={() => onEdit(location)}>
-        <Ionicons name="pencil" size={18} color="#4dabf7" />
+        {Platform.OS !== 'web' && Ionicons ? (
+          <Ionicons name="pencil" size={18} color="#4dabf7" />
+        ) : (
+          <Text style={styles.actionButtonText}>✏️</Text>
+        )}
       </TouchableOpacity>
       <TouchableOpacity style={styles.actionButton} onPress={() => onDelete(location.id)}>
-        <Ionicons name="trash" size={18} color="#ff6b6b" />
+        {Platform.OS !== 'web' && Ionicons ? (
+          <Ionicons name="trash" size={18} color="#ff6b6b" />
+        ) : (
+          <Text style={styles.actionButtonText}>🗑️</Text>
+        )}
       </TouchableOpacity>
     </View>
   </View>
@@ -84,10 +110,18 @@ const SensorListItem = ({ sensor, onEdit, onCalibrate }) => (
         ]} 
       />
       <TouchableOpacity style={styles.actionButton} onPress={() => onEdit(sensor)}>
-        <Ionicons name="pencil" size={18} color="#4dabf7" />
+        {Platform.OS !== 'web' && Ionicons ? (
+          <Ionicons name="pencil" size={18} color="#4dabf7" />
+        ) : (
+          <Text style={styles.actionButtonText}>✏️</Text>
+        )}
       </TouchableOpacity>
       <TouchableOpacity style={styles.actionButton} onPress={() => onCalibrate(sensor.id)}>
-        <Ionicons name="options" size={18} color="#4dabf7" />
+        {Platform.OS !== 'web' && Ionicons ? (
+          <Ionicons name="options" size={18} color="#4dabf7" />
+        ) : (
+          <Text style={styles.actionButtonText}>⚙️</Text>
+        )}
       </TouchableOpacity>
     </View>
   </View>
@@ -98,6 +132,10 @@ const CowForm = ({ cow, onSave, onCancel }) => {
   const [name, setName] = useState(cow?.name || '');
   const [sensorId, setSensorId] = useState(cow?.sensorId || '');
   const [location, setLocation] = useState(cow?.location || '');
+  const [activityLevel, setActivityLevel] = useState(cow?.activityLevel?.toString() || '5.0');
+  const [stressLevel, setStressLevel] = useState(cow?.stressLevel?.toString() || '3.0');
+  const [heartRate, setHeartRate] = useState(cow?.heartRate?.toString() || '70');
+
   const [active, setActive] = useState(cow?.active !== false);
 
   return (
@@ -135,6 +173,41 @@ const CowForm = ({ cow, onSave, onCancel }) => {
       </View>
       
       <View style={styles.formField}>
+        <Text style={styles.formLabel}>Activity Level (0-10)</Text>
+        <TextInput
+          style={styles.formInput}
+          value={activityLevel}
+          onChangeText={setActivityLevel}
+          placeholder="5.0"
+          keyboardType="numeric"
+        />
+      </View>
+      
+      <View style={styles.formField}>
+        <Text style={styles.formLabel}>Stress Level (0-10)</Text>
+        <TextInput
+          style={styles.formInput}
+          value={stressLevel}
+          onChangeText={setStressLevel}
+          placeholder="3.0"
+          keyboardType="numeric"
+        />
+      </View>
+      
+      <View style={styles.formField}>
+        <Text style={styles.formLabel}>Heart Rate (BPM)</Text>
+        <TextInput
+          style={styles.formInput}
+          value={heartRate}
+          onChangeText={setHeartRate}
+          placeholder="70"
+          keyboardType="numeric"
+        />
+      </View>
+      
+
+      
+      <View style={styles.formField}>
         <Text style={styles.formLabel}>Active</Text>
         <Switch
           value={active}
@@ -150,7 +223,17 @@ const CowForm = ({ cow, onSave, onCancel }) => {
         </TouchableOpacity>
         <TouchableOpacity 
           style={styles.saveButton} 
-          onPress={() => onSave({ id: cow?.id, name, sensorId, location, active })}
+          onPress={() => onSave({ 
+            id: cow?.id, 
+            name, 
+            sensorId, 
+            location, 
+            activityLevel: parseFloat(activityLevel) || 5.0,
+            stressLevel: parseFloat(stressLevel) || 3.0,
+            heartRate: parseInt(heartRate) || 70,
+
+            active 
+          })}
         >
           <Text style={styles.saveButtonText}>Save</Text>
         </TouchableOpacity>
@@ -161,11 +244,37 @@ const CowForm = ({ cow, onSave, onCancel }) => {
 
 const FarmManagementScreen = () => {
   const [activeTab, setActiveTab] = useState('cows');
-  const [cows, setCows] = useState(mockCows);
+  const [cows, setCows] = useState<CowData[]>([]);
   const [locations, setLocations] = useState(mockLocations);
   const [sensors, setSensors] = useState(mockSensors);
   const [editingItem, setEditingItem] = useState(null);
   const [showForm, setShowForm] = useState(false);
+
+  useEffect(() => {
+    // טעינת נתוני פרות מהשירות
+    const loadCows = () => {
+      const updatedCows = getAllCows();
+      setCows(updatedCows);
+    };
+    
+    loadCows();
+    
+    // עדכון כל 2 שניות (יותר מהיר)
+    const interval = setInterval(() => {
+      const updatedCows = getAllCows();
+      setCows(updatedCows);
+    }, 2000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // עדכון כשחוזרים למסך (לדוגמה מ-AddCowScreen)
+  useFocusEffect(
+    React.useCallback(() => {
+      const updatedCows = getAllCows();
+      setCows(updatedCows);
+    }, [])
+  );
 
   const handleAddCow = () => {
     setEditingItem(null);
@@ -178,20 +287,86 @@ const FarmManagementScreen = () => {
   };
 
   const handleDeleteCow = (id) => {
-    setCows(cows.filter(cow => cow.id !== id));
+    const cowToDelete = cows.find(cow => cow.id === id);
+    Alert.alert(
+      'מחיקת פרה',
+      `האם אתה בטוח שברצונך למחוק את הפרה "${cowToDelete?.name || 'Unknown'}"?\nפעולה זו לא ניתנת לביטול.`,
+      [
+        { text: 'ביטול', style: 'cancel' },
+        { 
+          text: 'מחק', 
+          style: 'destructive',
+          onPress: () => {
+            const success = deleteCow(id);
+            if (success) {
+              // עדכון מיידי של הרשימה
+              const updatedCows = getAllCows();
+              setCows(updatedCows);
+              Alert.alert('הצלחה', `הפרה "${cowToDelete?.name || 'Unknown'}" נמחקה בהצלחה`);
+            } else {
+              Alert.alert('שגיאה', 'לא ניתן למחוק את הפרה');
+            }
+          }
+        }
+      ]
+    );
   };
 
-  const handleSaveCow = (cow) => {
-    if (editingItem) {
-      setCows(cows.map(c => c.id === cow.id ? cow : c));
-    } else {
-      const newCow = {
-        ...cow,
-        id: `cow${cows.length + 1}`,
-      };
-      setCows([...cows, newCow]);
+  const handleSaveCow = async (cowData) => {
+    // עדכון מיידי של הרשימה וסגירת הטופס
+    const closeFormAndUpdate = () => {
+      const updatedCows = getAllCows();
+      setCows(updatedCows);
+      setShowForm(false);
+    };
+
+    try {
+      if (editingItem) {
+        // עדכון פרה קיימת
+        const updated = updateCow(editingItem.id, cowData);
+        closeFormAndUpdate();
+        
+        if (updated) {
+          Alert.alert('הצלחה', 'הפרה עודכנה בהצלחה');
+        } else {
+          Alert.alert('שגיאה', 'לא ניתן לעדכן את הפרה');
+        }
+      } else {
+        // הוספת פרה חדשה
+        const newCowData = createDefaultCowData(cowData.name, cowData.sensorId, cowData.location, {
+          activityLevel: cowData.activityLevel,
+          stressLevel: cowData.stressLevel,
+          heartRate: cowData.heartRate
+        });
+        const newCow = addCow({
+          ...newCowData,
+          active: cowData.active
+        });
+        
+        closeFormAndUpdate();
+        
+        // בדיקת חשש לרעידת אדמה
+        const allCows = getAllCows();
+        await monitorAndAlert(allCows);
+        
+        // בדיקה מיוחדת לפרה חדשה עם ציון אנומליה גבוה
+        if (newCow.anomalyScore > 0.9) {
+          Alert.alert(
+            '⚠️ התראת חירום!',
+            `הפרה החדשה "${newCow.name}" מראה ציון אנומליה קריטי של ${newCow.anomalyScore.toFixed(2)}!\n\nחשש לרעידת אדמה - אנא בדקו את המצב מייד!`,
+            [
+              { text: 'הבנתי', style: 'default' },
+              { text: 'צפה פרטים', onPress: () => router.push('/screens/AnomalyDetectionScreen') }
+            ]
+          );
+        } else {
+          Alert.alert('הצלחה', `הפרה ${newCow.name} נוספה בהצלחה עם ציון אנומליה: ${newCow.anomalyScore.toFixed(2)}`);
+        }
+      }
+    } catch (error) {
+      closeFormAndUpdate(); // סגירת הטופס גם במקרה של שגיאה
+      Alert.alert('שגיאה', 'אירעה שגיאה בשמירת הנתונים');
     }
-    setShowForm(false);
   };
 
   const handleCalibrateSensor = (id) => {
@@ -228,7 +403,11 @@ const FarmManagementScreen = () => {
         <CowForm 
           cow={editingItem} 
           onSave={handleSaveCow} 
-          onCancel={() => setShowForm(false)} 
+          onCancel={() => {
+            setShowForm(false);
+            const updatedCows = getAllCows();
+            setCows(updatedCows);
+          }} 
         />
       ) : (
         <>
@@ -237,7 +416,11 @@ const FarmManagementScreen = () => {
               <View style={styles.listHeader}>
                 <Text style={styles.listTitle}>Monitored Cows</Text>
                 <TouchableOpacity style={styles.addButton} onPress={handleAddCow}>
-                  <Ionicons name="add" size={24} color="white" />
+                  {Platform.OS !== 'web' && Ionicons ? (
+                    <Ionicons name="add" size={24} color="white" />
+                  ) : (
+                    <Text style={styles.addButtonText}>+</Text>
+                  )}
                 </TouchableOpacity>
               </View>
               
@@ -256,9 +439,6 @@ const FarmManagementScreen = () => {
             <>
               <View style={styles.listHeader}>
                 <Text style={styles.listTitle}>Farm Locations</Text>
-                <TouchableOpacity style={styles.addButton} onPress={() => {}}>
-                  <Ionicons name="add" size={24} color="white" />
-                </TouchableOpacity>
               </View>
               
               {locations.map(location => (
@@ -276,9 +456,6 @@ const FarmManagementScreen = () => {
             <>
               <View style={styles.listHeader}>
                 <Text style={styles.listTitle}>IoT Sensors</Text>
-                <TouchableOpacity style={styles.addButton} onPress={() => {}}>
-                  <Ionicons name="add" size={24} color="white" />
-                </TouchableOpacity>
               </View>
               
               {sensors.map(sensor => (
@@ -351,6 +528,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+
   listTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -478,6 +656,14 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 12,
     color: '#666',
+  },
+  actionButtonText: {
+    fontSize: 16,
+  },
+  addButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 
