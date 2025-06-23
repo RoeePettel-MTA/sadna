@@ -256,8 +256,7 @@ const DashboardScreen: React.FC = () => {
       <ScrollView style={styles.container}>
         <Text style={styles.title}>Cow Behavior Monitoring</Text>
       
-      {((alerts.some(alert => alert.severity === 'Critical') || earthquakeAlert?.active) && 
-        (cowData.some(cow => cow.anomalyScore > 0.9) || earthquakeAlert?.active)) && (
+      {earthquakeAlert?.active && (
         <AlertBanner 
           message={earthquakeAlert?.active ? earthquakeAlert.title : "⚠️ התראת חירום: חשש לרעידת אדמה!"} 
           severity="Critical" 

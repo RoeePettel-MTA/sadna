@@ -12,7 +12,7 @@ export const detectAnomaly = (cowData) => {
   let severity = null;
   
   // בדיקת רמת פעילות חריגה
-  if (cowData.activityLevel > 8 || cowData.activityLevel < 2) {
+  if (cowData.activityLevel > 7 || cowData.activityLevel < 3) {
     const activityScore = Math.abs(cowData.activityLevel - 5) / 5;
     if (activityScore > maxScore) {
       maxScore = activityScore;
@@ -57,23 +57,19 @@ export const detectAnomaly = (cowData) => {
 export const detectGroupAnomaly = (cowsData) => {
   if (!cowsData || cowsData.length === 0) return { detected: false };
 
-  // ספירת הפרות עם אנומליות
-  const anomalies = cowsData.map(cow => detectAnomaly(cow))
-    .filter(result => result.detected);
+  // בדיקת פרות עם ציון 0.9 ומעלה
+  const highScoreCows = cowsData.filter(cow => cow.anomalyScore >= 0.9);
   
-  const anomalyPercentage = anomalies.length / cowsData.length;
-  
-  // אם יותר מ-50% מהפרות מראות אנומליות, זה עשוי להצביע על אירוע משותף
-  if (anomalyPercentage > 0.5) {
-    // חישוב ממוצע ציוני האנומליה
-    const avgScore = anomalies.reduce((sum, anomaly) => sum + anomaly.score, 0) / anomalies.length;
+  // דרישה: לפחות 2 פרות עם ציון 0.9 ומעלה
+  if (highScoreCows.length >= 2) {
+    const avgScore = highScoreCows.reduce((sum, cow) => sum + cow.anomalyScore, 0) / highScoreCows.length;
     
     return {
       detected: true,
       type: 'group',
-      severity: avgScore > 0.8 ? 'critical' : 'high',
+      severity: 'critical',
       score: avgScore,
-      affectedCount: anomalies.length,
+      affectedCount: highScoreCows.length,
       totalCount: cowsData.length
     };
   }
@@ -158,28 +154,7 @@ const checkRestlessness = (cowsData) => {
 // פונקציה לבדיקת אנומליות ושליחת התראות
 export const monitorAndAlert = async (cowsData) => {
   try {
-    // בדיקת אנומליות ברמת הפרה הבודדת
-    for (const cow of cowsData) {
-      const anomaly = detectAnomaly(cow);
-      if (anomaly.detected && anomaly.score > ANOMALY_THRESHOLD) {
-        await sendAnomalyAlert(
-          cow.name,
-          anomaly.type === 'activity' ? 'רמת פעילות חריגה' :
-          anomaly.type === 'stress' ? 'רמת לחץ גבוהה' : 'דופק חריג',
-          anomaly.severity === 'high' ? 'גבוהה' : 'נמוכה'
-        );
-      }
-      
-      // בדיקה מיוחדת לציון אנומליה גבוה מאוד
-      if (cow.anomalyScore > 0.9) {
-        await sendEarthquakeAlert(
-          cow.anomalyScore,
-          `הפרה "${cow.name}" מראה ציון אנומליה קריטי של ${cow.anomalyScore.toFixed(2)} - חשש לרעידת אדמה!`
-        );
-      }
-    }
-    
-    // בדיקת חשש לרעידת אדמה
+    // בדיקת חשש לרעידת אדמה רק על בסיס קבוצתי
     await detectEarthquakePrecursor(cowsData);
   } catch (error) {
     console.log('Error in monitor and alert:', error);

@@ -21,15 +21,15 @@ const AnomalyDetectionScreen = () => {
         // בדיקת חשש לרעידת אדמה
         const risk = await detectEarthquakePrecursor(cowData);
         
-        // בדיקה נוספת לפרות בודדות עם ציון אנומליה גבוה
-        const highAnomalyCows = cowData.filter(cow => cow.anomalyScore > 0.9);
+        // בדיקת לפחות 2 פרות עם ציון מעל 0.9
+        const highScoreCows = cowData.filter(cow => cow.anomalyScore > 0.9);
         
-        if (highAnomalyCows.length > 0 && !risk.detected) {
-          const maxScore = Math.max(...highAnomalyCows.map(cow => cow.anomalyScore));
+        if (highScoreCows.length >= 2) {
+          const avgScore = highScoreCows.reduce((sum, cow) => sum + cow.anomalyScore, 0) / highScoreCows.length;
           setEarthquakeRisk({
             detected: true,
-            confidence: maxScore,
-            details: `${highAnomalyCows.length} פרות מראות ציון אנומליה קריטי מעל 0.9. הפרות: ${highAnomalyCows.map(cow => cow.name).join(', ')}`
+            confidence: avgScore,
+            details: `${highScoreCows.length} פרות מראות ציון אנומליה קריטי מעל 0.9. הפרות: ${highScoreCows.map(cow => cow.name).join(', ')}`
           });
         } else {
           setEarthquakeRisk(risk);
